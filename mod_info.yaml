@@ -1,9 +1,8 @@
 # ONI Mod Manager metadata. Ships alongside OniAgent.dll in the installed mod
-# folder. Values below are placeholders — verify/update against the actual
-# game build via the in-game Mod Manager on the Mac test machine before
-# first install; an incorrect minimumSupportedBuild can cause silent
-# failure to load.
-supportedContent: All
+# folder. minimumSupportedBuild is a placeholder — update it once we know
+# which build this was actually verified against, if a build gate matters.
+requiredDlcIds: []
+forbiddenDlcIds: []
 minimumSupportedBuild: 0
 version: 0.1.0
 APIVersion: 2
