@@ -1,0 +1,6 @@
+bin/
+obj/
+
+# Vendored reference assemblies — copied per-machine from the game install,
+# not part of the mod's own source. See lib/README.md.
+lib/*.dll
