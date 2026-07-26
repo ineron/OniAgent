@@ -74,6 +74,14 @@ namespace OniAgent
                 return;
             }
 
+            if (request.HttpMethod == "GET" && request.Url.AbsolutePath == "/api/snapshot/colony")
+            {
+                var snapshot = SnapshotCache.LatestColony
+                    ?? new ColonySnapshot { SchemaVersion = ColonySnapshotCollector.SchemaVersion };
+                WriteJson(response, snapshot);
+                return;
+            }
+
             response.StatusCode = 404;
             response.Close();
         }

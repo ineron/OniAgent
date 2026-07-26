@@ -7,5 +7,6 @@ namespace OniAgent.Snapshot
     public static class SnapshotCache
     {
         public static volatile DuplicantSnapshotResponse LatestDuplicants;
+        public static volatile ColonySnapshot LatestColony;
     }
 }

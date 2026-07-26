@@ -20,6 +20,7 @@ namespace OniAgent.Snapshot
             framesSinceLastTick = 0;
 
             SnapshotCache.LatestDuplicants = SnapshotCollector.CollectDuplicants();
+            SnapshotCache.LatestColony = ColonySnapshotCollector.Collect();
         }
     }
 }
