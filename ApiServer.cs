@@ -3,6 +3,7 @@ using System.Net;
 using System.Text;
 using System.Threading;
 using Newtonsoft.Json;
+using OniAgent.Settings;
 using OniAgent.Snapshot;
 using UnityEngine;
 
@@ -12,9 +13,15 @@ namespace OniAgent
     {
         private const string Prefix = "http://localhost:9813/";
 
+        private readonly AgentSettings settings;
         private HttpListener listener;
         private Thread listenerThread;
         private volatile bool running;
+
+        public ApiServer(AgentSettings settings)
+        {
+            this.settings = settings;
+        }
 
         public void Start()
         {
@@ -79,6 +86,17 @@ namespace OniAgent
                 var snapshot = SnapshotCache.LatestColony
                     ?? new ColonySnapshot { SchemaVersion = ColonySnapshotCollector.SchemaVersion };
                 WriteJson(response, snapshot);
+                return;
+            }
+
+            if (request.HttpMethod == "GET" && request.Url.AbsolutePath == "/api/settings")
+            {
+                WriteJson(response, new
+                {
+                    LedgyxEndpoint = settings.LedgyxEndpoint,
+                    ApiKeySet = !string.IsNullOrEmpty(settings.ApiKey),
+                    OperationalCadenceSeconds = settings.OperationalCadenceSeconds
+                });
                 return;
             }
 
