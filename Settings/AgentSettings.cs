@@ -36,10 +36,9 @@ namespace OniAgent.Settings
         // wiring can differ (see oni-colony-snapshot-3tier-cadence-design).
         // Reuses the same ApiKey/X-API-Key auth as the operational push,
         // since both are plain POST ingestion routes on the mod's own
-        // outbound side (unlike SSE's query-string auth). Not consumed by
-        // any code yet — the push client for this tier is a separate
-        // follow-up (see CriticalEventCollector's header comment: it needs
-        // an event-driven queue, not a cron timer like LedgyxPushClient).
+        // outbound side (unlike SSE's query-string auth). Consumed by
+        // CriticalEventPushClient (event-driven queue+worker, not a cron
+        // timer like LedgyxPushClient).
         public string CriticalEventsEndpoint = "";
     }
 }

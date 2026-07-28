@@ -12,10 +12,9 @@ namespace OniAgent.Snapshot
     // dangerous state, mirroring how the game's own state machines (Health,
     // StressMonitor, SicknessMonitor, BuildingHP) gate on threshold-crossing
     // rather than raw values. Per the 3-tier design, events like these are
-    // meant to be pushed to Ledgyx immediately rather than batched on a
-    // cron — the push wiring itself is a separate follow-up (mirrors how
-    // task #3's collector predated task #7's push client for the
-    // operational tier).
+    // pushed to Ledgyx immediately rather than batched on a cron — see
+    // OniAgent.Networking.CriticalEventPushClient, which SnapshotTicker
+    // hands each new batch of events to as soon as Collect() returns them.
     public static class CriticalEventCollector
     {
         public const int SchemaVersion = 1;

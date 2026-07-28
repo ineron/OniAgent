@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using OniAgent.Networking;
 using UnityEngine;
 
 namespace OniAgent.Snapshot
@@ -14,18 +15,21 @@ namespace OniAgent.Snapshot
         // OperationalCadenceSeconds, min 5s) is the fastest hook this mod
         // has today — good enough reaction time for a game tick, and
         // reusing it avoids a second MonoBehaviour/timer just for this.
-        // Actually pushing each event to Ledgyx without waiting for
-        // PushCadenceSeconds is a separate follow-up (see
-        // CriticalEventCollector's header comment).
+        // Newly-detected events are hop off this thread immediately via
+        // criticalEventPushClient.Enqueue (see that class for the
+        // event-driven, non-cadence push worker) rather than waiting for
+        // PushCadenceSeconds, which only governs the operational tier.
         private const int MaxRecentCriticalEvents = 50;
 
         private float cadenceSeconds = DefaultCadenceSeconds;
         private float secondsSinceLastTick;
+        private CriticalEventPushClient criticalEventPushClient;
 
         // Called once right after AddComponent, before the first LateUpdate.
-        public void Configure(int operationalCadenceSeconds)
+        public void Configure(int operationalCadenceSeconds, CriticalEventPushClient criticalEventPushClient)
         {
             cadenceSeconds = operationalCadenceSeconds;
+            this.criticalEventPushClient = criticalEventPushClient;
         }
 
         private void LateUpdate()
@@ -55,6 +59,8 @@ namespace OniAgent.Snapshot
                     SchemaVersion = CriticalEventCollector.SchemaVersion,
                     Events = combined,
                 };
+
+                criticalEventPushClient?.Enqueue(newEvents);
             }
         }
     }

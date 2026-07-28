@@ -11,6 +11,7 @@ namespace OniAgent
     {
         private static ApiServer apiServer;
         private static LedgyxPushClient pushClient;
+        private static CriticalEventPushClient criticalEventPushClient;
 
         public override void OnLoad(Harmony harmony)
         {
@@ -20,10 +21,13 @@ namespace OniAgent
 
             var settings = SettingsManager.Load();
 
+            criticalEventPushClient = new CriticalEventPushClient(settings);
+            criticalEventPushClient.Start();
+
             var runner = new GameObject("OniAgentRunner");
             Object.DontDestroyOnLoad(runner);
             var ticker = runner.AddComponent<SnapshotTicker>();
-            ticker.Configure(settings.OperationalCadenceSeconds);
+            ticker.Configure(settings.OperationalCadenceSeconds, criticalEventPushClient);
 
             apiServer = new ApiServer(settings);
             apiServer.Start();
