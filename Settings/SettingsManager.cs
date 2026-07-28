@@ -61,7 +61,10 @@ namespace OniAgent.Settings
             Debug.Log("[OniAgent] Settings loaded: endpoint=" + settings.LedgyxEndpoint
                 + ", apiKeySet=" + !string.IsNullOrEmpty(settings.ApiKey)
                 + ", operationalCadenceSeconds=" + settings.OperationalCadenceSeconds
-                + ", pushCadenceSeconds=" + settings.PushCadenceSeconds);
+                + ", pushCadenceSeconds=" + settings.PushCadenceSeconds
+                + ", sseEndpoint=" + settings.SseEndpoint
+                + ", sseTokenSet=" + !string.IsNullOrEmpty(settings.SseToken)
+                + ", criticalEventsEndpoint=" + settings.CriticalEventsEndpoint);
 
             return settings;
         }
