@@ -23,9 +23,14 @@ namespace OniAgent.Networking
     // (see oni-ledgyx-batch-insert-fires-per-row-subscription-trigger-
     // critical-event-tier), so batching here loses no downstream behavior.
     //
-    // The wire body is the CriticalEvent list as-is (no envelope): Ledgyx's
-    // Dictionary.critical_event table columns match the DTO 1:1, and the
-    // insert endpoint expects an array of rows.
+    // The wire body is a CriticalEventResponse (SchemaVersion + Events[]),
+    // same shape GET /api/snapshot/critical returns — matches what the
+    // Ledgyx insert endpoint was actually built and tested against (a
+    // top-level SchemaVersion sibling to the Events array, not per-row, and
+    // not a bare array). See the mismatch this fixed: an earlier version of
+    // this file POSTed a bare List<CriticalEvent>, which the endpoint also
+    // accepted (rows landed), but without the wrapper Ledgyx's insert logic
+    // wasn't actually tested against — this reverts to the tested shape.
     //
     // A failed POST logs and drops the batch — same posture as
     // LedgyxPushClient, no retry/redelivery. Out of scope for now; the
@@ -107,7 +112,12 @@ namespace OniAgent.Networking
                 return;
             }
 
-            var body = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(batch));
+            var payload = new CriticalEventResponse
+            {
+                SchemaVersion = CriticalEventCollector.SchemaVersion,
+                Events = batch,
+            };
+            var body = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(payload));
 
             var request = (HttpWebRequest)WebRequest.Create(settings.CriticalEventsEndpoint);
             request.Method = "POST";
