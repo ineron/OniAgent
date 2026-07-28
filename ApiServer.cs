@@ -89,6 +89,14 @@ namespace OniAgent
                 return;
             }
 
+            if (request.HttpMethod == "GET" && request.Url.AbsolutePath == "/api/snapshot/critical")
+            {
+                var snapshot = SnapshotCache.RecentCriticalEvents
+                    ?? new CriticalEventResponse { SchemaVersion = CriticalEventCollector.SchemaVersion };
+                WriteJson(response, snapshot);
+                return;
+            }
+
             if (request.HttpMethod == "GET" && request.Url.AbsolutePath == "/api/settings")
             {
                 WriteJson(response, new

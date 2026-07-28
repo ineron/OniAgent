@@ -1,0 +1,250 @@
+using System.Collections.Generic;
+
+namespace OniAgent.Snapshot
+{
+    // Must be called from Unity's main thread — reads live game components,
+    // same as SnapshotCollector/ColonySnapshotCollector. See
+    // oni-confirmed-game-api-surface-for-critical-event-tier-via-decompile
+    // for the game API this reads and why each threshold was chosen.
+    //
+    // Unlike the operational/environmental tiers, this tier is edge-
+    // triggered: Collect() only returns something on a transition into a
+    // dangerous state, mirroring how the game's own state machines (Health,
+    // StressMonitor, SicknessMonitor, BuildingHP) gate on threshold-crossing
+    // rather than raw values. Per the 3-tier design, events like these are
+    // meant to be pushed to Ledgyx immediately rather than batched on a
+    // cron — the push wiring itself is a separate follow-up (mirrors how
+    // task #3's collector predated task #7's push client for the
+    // operational tier).
+    public static class CriticalEventCollector
+    {
+        public const int SchemaVersion = 1;
+
+        // Previous-tick state, keyed by the same GetInstanceID()-based ids
+        // used elsewhere in this mod. An id absent from the "last" map means
+        // "never observed before this tick" — treated as an implicit healthy
+        // baseline (Perfect / tier 0 / Powered), NOT "skip this entity".
+        // Verified against a real 1625-cycle save (2026-07-28): a duplicant
+        // chronically stuck at max stress tier for a long time produced zero
+        // events under an earlier version of this code that only recorded a
+        // silent baseline on first sight and then required a further
+        // transition — since the tier never changed tick-to-tick, it never
+        // fired, even though "a duplicant has been rampaging from stress"
+        // is exactly what this tier exists to report. Assuming a healthy
+        // baseline for unseen entities means the very first observation of
+        // an already-dangerous, long-standing condition (a save loaded
+        // mid-crisis, or the mod loaded after the state had already gone
+        // bad) fires immediately instead of being silently swallowed. The
+        // trade-off — one alert per already-bad entity at mod load, instead
+        // of zero — is the correct side to err on for an observability tool.
+        //
+        // These maps grow for the lifetime of the process (a dead
+        // duplicant's id is never removed from lastHealthState, etc.) —
+        // intentionally not pruned. The leak is bounded by "total distinct
+        // duplicants/consumers that ever existed this session", a few dozen
+        // to low hundreds of tiny entries even in a very long game — not
+        // worth the complexity of eviction. lastBuildings is the one
+        // exception: it's fully rebuilt every tick (see below), so destroyed
+        // buildings are naturally dropped, not leaked.
+        private static readonly Dictionary<string, Health.HealthState> lastHealthState
+            = new Dictionary<string, Health.HealthState>();
+        private static readonly Dictionary<string, int> lastStressTier
+            = new Dictionary<string, int>();
+        private static readonly Dictionary<string, int> lastSicknessTier
+            = new Dictionary<string, int>();
+        private static readonly Dictionary<string, bool> lastConsumerPowered
+            = new Dictionary<string, bool>();
+        private static Dictionary<string, BuildingMeta> lastBuildings
+            = new Dictionary<string, BuildingMeta>();
+
+        private struct BuildingMeta
+        {
+            public string Name;
+            public string PrefabId;
+            public int WorldId;
+        }
+
+        public static List<CriticalEvent> Collect()
+        {
+            var events = new List<CriticalEvent>();
+            var now = System.DateTime.UtcNow.ToString("o");
+
+            CollectDuplicantEvents(events, now);
+            CollectBuildingDestroyedEvents(events, now);
+            CollectPowerOutageEvents(events, now);
+
+            return events;
+        }
+
+        private static void CollectDuplicantEvents(List<CriticalEvent> events, string now)
+        {
+            foreach (var identity in Components.LiveMinionIdentities.Items)
+            {
+                var id = identity.GetInstanceID().ToString();
+                var name = identity.GetProperName();
+                var worldId = WorldLookup.WorldIdAt(identity.transform.position);
+
+                var health = identity.GetComponent<Health>();
+                if (health != null)
+                {
+                    var state = health.State;
+                    var previousState = lastHealthState.TryGetValue(id, out var seenState)
+                        ? seenState
+                        : Health.HealthState.Perfect;
+                    if (previousState != state
+                        && (state == Health.HealthState.Critical
+                            || state == Health.HealthState.Incapacitated
+                            || state == Health.HealthState.Dead))
+                    {
+                        events.Add(new CriticalEvent
+                        {
+                            EventType = "DuplicantHealth" + state,
+                            EntityId = id,
+                            EntityName = name,
+                            WorldId = worldId,
+                            Detail = previousState + " -> " + state,
+                            CapturedAt = now,
+                        });
+                    }
+                    lastHealthState[id] = state;
+                }
+
+                // Read thresholds via the game's own SMI methods rather than
+                // hardcoding the 60/100 stress values ourselves, so a future
+                // Klei rebalance can't silently desync our tiers from the
+                // game's (see the pattern node cited above).
+                var stressSmi = identity.GetSMI<StressMonitor.Instance>();
+                if (stressSmi != null)
+                {
+                    var tier = stressSmi.HasHadEnough() ? 2 : (stressSmi.IsStressed() ? 1 : 0);
+                    var previousTier = lastStressTier.TryGetValue(id, out var seenTier) ? seenTier : 0;
+                    if (tier > previousTier)
+                    {
+                        events.Add(new CriticalEvent
+                        {
+                            EventType = tier == 2 ? "DuplicantStressBreakdown" : "DuplicantStressed",
+                            EntityId = id,
+                            EntityName = name,
+                            WorldId = worldId,
+                            CapturedAt = now,
+                        });
+                    }
+                    lastStressTier[id] = tier;
+                }
+
+                var sicknessSmi = identity.GetSMI<SicknessMonitor.Instance>();
+                if (sicknessSmi != null)
+                {
+                    var tier = sicknessSmi.HasMajorDisease() ? 2 : (sicknessSmi.IsSick() ? 1 : 0);
+                    var previousTier = lastSicknessTier.TryGetValue(id, out var seenTier) ? seenTier : 0;
+                    if (tier > previousTier)
+                    {
+                        events.Add(new CriticalEvent
+                        {
+                            EventType = tier == 2 ? "DuplicantMajorDisease" : "DuplicantSick",
+                            EntityId = id,
+                            EntityName = name,
+                            WorldId = worldId,
+                            CapturedAt = now,
+                        });
+                    }
+                    lastSicknessTier[id] = tier;
+                }
+            }
+        }
+
+        // "Destroyed" means removed from the world entirely, not merely
+        // damaged — most building defs don't set destroyOnDamaged, so a
+        // building at 0 HP (BuildingHP.IsBroken) just sits there awaiting
+        // repair rather than disappearing. The only reliable signal for
+        // actual destruction is a building id present last tick and absent
+        // this tick, so this rebuilds the full id set every tick (same list
+        // ColonySnapshotCollector already walks for the operational tier)
+        // and diffs it against the previous tick's snapshot.
+        private static void CollectBuildingDestroyedEvents(List<CriticalEvent> events, string now)
+        {
+            var current = new Dictionary<string, BuildingMeta>();
+
+            foreach (var building in Components.BuildingCompletes.Items)
+            {
+                var def = building.Def;
+                if (def.ObjectLayer != ObjectLayer.Building || def.IsFoundation || def.IsTilePiece)
+                {
+                    continue;
+                }
+
+                var id = building.GetInstanceID().ToString();
+                var prefabId = building.GetComponent<KPrefabID>();
+                var selectable = building.GetComponent<KSelectable>();
+                current[id] = new BuildingMeta
+                {
+                    Name = selectable != null ? ColonySnapshotCollector.CleanName(selectable.GetName()) : null,
+                    PrefabId = prefabId != null ? prefabId.PrefabTag.Name : null,
+                    WorldId = WorldLookup.WorldIdAt(building.transform.position),
+                };
+            }
+
+            foreach (var kv in lastBuildings)
+            {
+                if (current.ContainsKey(kv.Key))
+                {
+                    continue;
+                }
+
+                events.Add(new CriticalEvent
+                {
+                    EventType = "BuildingDestroyed",
+                    EntityId = kv.Key,
+                    EntityName = kv.Value.Name,
+                    WorldId = kv.Value.WorldId,
+                    Detail = kv.Value.PrefabId,
+                    CapturedAt = now,
+                });
+            }
+
+            lastBuildings = current;
+        }
+
+        // A consumer is only interesting once it's wired to a circuit
+        // (IsConnected) and actually wants power (WattsNeededWhenActive > 0)
+        // — a consumer that was simply never wired up is not an outage.
+        // IEnergyConsumer only exposes IsConnected/IsPowered booleans, not
+        // CircuitManager's richer ConnectionStatus enum (confirmed via
+        // decompile — see the pattern node), so the outage signal is
+        // reconstructed from those two: was (Connected, Powered), now
+        // (Connected, !Powered).
+        private static void CollectPowerOutageEvents(List<CriticalEvent> events, string now)
+        {
+            foreach (var consumer in Components.EnergyConsumers.Items)
+            {
+                if (consumer.WattsNeededWhenActive <= 0f)
+                {
+                    continue;
+                }
+
+                var id = consumer.GetInstanceID().ToString();
+
+                if (!consumer.IsConnected)
+                {
+                    lastConsumerPowered.Remove(id);
+                    continue;
+                }
+
+                var poweredNow = consumer.IsPowered;
+                var wasPowered = lastConsumerPowered.TryGetValue(id, out var seenPowered) ? seenPowered : true;
+                if (wasPowered && !poweredNow)
+                {
+                    events.Add(new CriticalEvent
+                    {
+                        EventType = "PowerOutage",
+                        EntityId = id,
+                        EntityName = ColonySnapshotCollector.CleanName(consumer.Name),
+                        WorldId = WorldLookup.WorldIdAt(consumer.transform.position),
+                        CapturedAt = now,
+                    });
+                }
+                lastConsumerPowered[id] = poweredNow;
+            }
+        }
+    }
+}

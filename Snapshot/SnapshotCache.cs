@@ -8,5 +8,12 @@ namespace OniAgent.Snapshot
     {
         public static volatile DuplicantSnapshotResponse LatestDuplicants;
         public static volatile ColonySnapshot LatestColony;
+
+        // Bounded rolling window of the most recent critical/event-tier
+        // events (see CriticalEventCollector), not just "since the last
+        // tick" — a new CriticalEventResponse replaces this reference each
+        // tick that produces new events (never mutated in place), same
+        // pattern as the other two fields.
+        public static volatile CriticalEventResponse RecentCriticalEvents;
     }
 }

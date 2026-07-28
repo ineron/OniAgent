@@ -196,7 +196,9 @@ namespace OniAgent.Snapshot
         // KSelectable.GetName() and friends return Unity rich-text with
         // <link="ID">Display Name</link> wrapping (confirmed against a real
         // save's output) — strip markup so the agent sees plain text.
-        private static string CleanName(string name)
+        // internal (not private): CriticalEventCollector reuses this for the
+        // same buildings/consumers, rather than duplicating the regex.
+        internal static string CleanName(string name)
         {
             return name != null ? RichTextTag.Replace(name, "") : null;
         }
