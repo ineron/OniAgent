@@ -7,7 +7,8 @@ namespace OniAgent.Snapshot
     // See SnapshotTicker, which is the only caller.
     public static class SnapshotCollector
     {
-        public const int SchemaVersion = 1;
+        // v2 added WorldId for Spaced Out cluster support.
+        public const int SchemaVersion = 2;
 
         public static DuplicantSnapshotResponse CollectDuplicants()
         {
@@ -39,6 +40,7 @@ namespace OniAgent.Snapshot
                 Name = identity.GetProperName(),
                 PosX = position.x,
                 PosY = position.y,
+                WorldId = WorldLookup.WorldIdAt(position),
             };
 
             if (modifiers != null)

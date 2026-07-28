@@ -95,7 +95,8 @@ namespace OniAgent
                 {
                     LedgyxEndpoint = settings.LedgyxEndpoint,
                     ApiKeySet = !string.IsNullOrEmpty(settings.ApiKey),
-                    OperationalCadenceSeconds = settings.OperationalCadenceSeconds
+                    OperationalCadenceSeconds = settings.OperationalCadenceSeconds,
+                    PushCadenceSeconds = settings.PushCadenceSeconds
                 });
                 return;
             }

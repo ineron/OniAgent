@@ -13,6 +13,10 @@ namespace OniAgent.Snapshot
         public List<BuildingSnapshot> Buildings = new List<BuildingSnapshot>();
         public PowerSnapshot Power = new PowerSnapshot();
         public ResearchSnapshot Research = new ResearchSnapshot();
+
+        // Spaced Out only; a vanilla save reports one WorldSnapshot and no rockets.
+        public List<WorldSnapshot> Worlds = new List<WorldSnapshot>();
+        public List<RocketSnapshot> Rockets = new List<RocketSnapshot>();
     }
 
     public class BuildingSnapshot
@@ -22,6 +26,10 @@ namespace OniAgent.Snapshot
         public string Name;
         public float PosX;
         public float PosY;
+
+        // Which WorldContainer (planet/asteroid) this building sits on —
+        // see WorldLookup. -1 if off-grid.
+        public int WorldId;
 
         // Null when the building has no Operational component (e.g. plain tiles).
         public bool? IsOperational;
@@ -50,6 +58,7 @@ namespace OniAgent.Snapshot
     {
         public string Id;
         public string Name;
+        public int WorldId;
         public float WattageRating;
         public float JoulesAvailable;
         public float Capacity;
@@ -60,6 +69,7 @@ namespace OniAgent.Snapshot
     {
         public string Id;
         public string Name;
+        public int WorldId;
         public float JoulesAvailable;
         public float Capacity;
         public float PercentFull;
@@ -69,6 +79,7 @@ namespace OniAgent.Snapshot
     {
         public string Id;
         public string Name;
+        public int WorldId;
         public float WattsUsed;
         public float WattsNeededWhenActive;
         public bool IsPowered;

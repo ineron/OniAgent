@@ -7,7 +7,9 @@ namespace OniAgent.Snapshot
     // See SnapshotTicker, which is the only caller.
     public static class ColonySnapshotCollector
     {
-        public const int SchemaVersion = 1;
+        // v2 added WorldId to buildings/power entities and the Worlds/Rockets
+        // lists for Spaced Out cluster support.
+        public const int SchemaVersion = 2;
 
         private static readonly Regex RichTextTag = new Regex("<.*?>", RegexOptions.Compiled);
 
@@ -35,6 +37,8 @@ namespace OniAgent.Snapshot
 
             CollectPower(snapshot.Power);
             CollectResearch(snapshot.Research);
+            CollectWorlds(snapshot.Worlds);
+            RocketSnapshotCollector.Collect(snapshot.Rockets);
 
             return snapshot;
         }
@@ -57,6 +61,7 @@ namespace OniAgent.Snapshot
                 Name = selectable != null ? CleanName(selectable.GetName()) : null,
                 PosX = position.x,
                 PosY = position.y,
+                WorldId = WorldLookup.WorldIdAt(position),
             };
 
             if (operational != null)
@@ -99,6 +104,7 @@ namespace OniAgent.Snapshot
                 {
                     Id = generator.GetInstanceID().ToString(),
                     Name = CleanName(generator.GetComponent<KSelectable>()?.GetName()),
+                    WorldId = WorldLookup.WorldIdAt(generator.transform.position),
                     WattageRating = generator.WattageRating,
                     JoulesAvailable = generator.JoulesAvailable,
                     Capacity = generator.Capacity,
@@ -112,6 +118,7 @@ namespace OniAgent.Snapshot
                 {
                     Id = battery.GetInstanceID().ToString(),
                     Name = CleanName(battery.Name),
+                    WorldId = WorldLookup.WorldIdAt(battery.transform.position),
                     JoulesAvailable = battery.JoulesAvailable,
                     Capacity = battery.Capacity,
                     PercentFull = battery.PercentFull,
@@ -124,9 +131,32 @@ namespace OniAgent.Snapshot
                 {
                     Id = consumer.GetInstanceID().ToString(),
                     Name = CleanName(consumer.Name),
+                    WorldId = WorldLookup.WorldIdAt(consumer.transform.position),
                     WattsUsed = consumer.WattsUsed,
                     WattsNeededWhenActive = consumer.WattsNeededWhenActive,
                     IsPowered = consumer.IsPowered,
+                });
+            }
+        }
+
+        private static void CollectWorlds(List<WorldSnapshot> worlds)
+        {
+            var clusterManager = ClusterManager.Instance;
+            if (clusterManager == null)
+            {
+                return;
+            }
+
+            foreach (var world in clusterManager.WorldContainers)
+            {
+                worlds.Add(new WorldSnapshot
+                {
+                    Id = world.id,
+                    Name = !string.IsNullOrEmpty(world.overrideName) ? world.overrideName : world.worldName,
+                    WorldType = world.worldType,
+                    IsModuleInterior = world.IsModuleInterior,
+                    ParentWorldId = world.ParentWorldId,
+                    IsStartWorld = world.IsStartWorld,
                 });
             }
         }

@@ -10,6 +10,7 @@ namespace OniAgent.Settings
     {
         private const string FileName = "settings.json";
         private const int MinCadenceSeconds = 5;
+        private const int MinPushCadenceSeconds = 60;
 
         public static AgentSettings Load()
         {
@@ -50,9 +51,17 @@ namespace OniAgent.Settings
                 settings.OperationalCadenceSeconds = MinCadenceSeconds;
             }
 
+            if (settings.PushCadenceSeconds < MinPushCadenceSeconds)
+            {
+                Debug.LogWarning("[OniAgent] PushCadenceSeconds " + settings.PushCadenceSeconds
+                    + " below minimum, clamping to " + MinPushCadenceSeconds);
+                settings.PushCadenceSeconds = MinPushCadenceSeconds;
+            }
+
             Debug.Log("[OniAgent] Settings loaded: endpoint=" + settings.LedgyxEndpoint
                 + ", apiKeySet=" + !string.IsNullOrEmpty(settings.ApiKey)
-                + ", operationalCadenceSeconds=" + settings.OperationalCadenceSeconds);
+                + ", operationalCadenceSeconds=" + settings.OperationalCadenceSeconds
+                + ", pushCadenceSeconds=" + settings.PushCadenceSeconds);
 
             return settings;
         }

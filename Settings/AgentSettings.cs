@@ -13,5 +13,12 @@ namespace OniAgent.Settings
         public string LedgyxEndpoint = "https://app.ledgyx.com/api/oni/snapshot";
         public string ApiKey = "";
         public int OperationalCadenceSeconds = 60;
+
+        // How often the cached snapshot is POSTed to Ledgyx. Kept separate
+        // from OperationalCadenceSeconds (which can go down to a 5s minimum
+        // for local /api/snapshot/* polling) because Ledgyx's ingestion
+        // channel fires one AI_AGENT run per pushed row and is quota-metered,
+        // not just rate-limited — pushing every 5s would burn quota fast.
+        public int PushCadenceSeconds = 60;
     }
 }
