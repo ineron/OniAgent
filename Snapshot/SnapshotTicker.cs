@@ -10,28 +10,43 @@ namespace OniAgent.Snapshot
     {
         private const float DefaultOperationalCadenceSeconds = 60f;
         private const float DefaultCriticalCadenceSeconds = 2f;
+        private const float DefaultEnvironmentalCadenceSeconds = 900f;
 
-        // Two independent cadences, not one shared timer: the operational
+        // Three independent cadences, not one shared timer: the operational
         // snapshot (colony/duplicants) is fine on a slow, infrequent poll,
         // but critical-tier dangers — oxygen depletion above all, which can
         // take a duplicant from fine to suffocating within a single
         // operational tick — need a much tighter loop. Since
         // CriticalEventPushClient already pushes each new event immediately
         // on detection (no cadence of its own), criticalCadenceSeconds is
-        // the actual end-to-end reaction-time knob for this tier.
+        // the actual end-to-end reaction-time knob for this tier. The
+        // environmental tier is the slowest of the three: it's periodic
+        // sampling of tile temp/mass/element, not something that needs
+        // near-real-time reaction, and walking every cell in the map is the
+        // heaviest single collection pass this mod does.
         private const int MaxRecentCriticalEvents = 50;
 
         private float operationalCadenceSeconds = DefaultOperationalCadenceSeconds;
         private float criticalCadenceSeconds = DefaultCriticalCadenceSeconds;
+        private float environmentalCadenceSeconds = DefaultEnvironmentalCadenceSeconds;
+        private int environmentalSectorSizeCells = EnvironmentalSnapshotCollector.DefaultSectorSizeCells;
         private float secondsSinceLastOperationalTick;
         private float secondsSinceLastCriticalTick;
+        private float secondsSinceLastEnvironmentalTick;
         private CriticalEventPushClient criticalEventPushClient;
 
         // Called once right after AddComponent, before the first LateUpdate.
-        public void Configure(int operationalCadenceSeconds, int criticalCadenceSeconds, CriticalEventPushClient criticalEventPushClient)
+        public void Configure(
+            int operationalCadenceSeconds,
+            int criticalCadenceSeconds,
+            int environmentalCadenceSeconds,
+            int environmentalSectorSizeCells,
+            CriticalEventPushClient criticalEventPushClient)
         {
             this.operationalCadenceSeconds = operationalCadenceSeconds;
             this.criticalCadenceSeconds = criticalCadenceSeconds;
+            this.environmentalCadenceSeconds = environmentalCadenceSeconds;
+            this.environmentalSectorSizeCells = environmentalSectorSizeCells;
             this.criticalEventPushClient = criticalEventPushClient;
         }
 
@@ -50,6 +65,13 @@ namespace OniAgent.Snapshot
             {
                 secondsSinceLastCriticalTick = 0f;
                 TickCritical();
+            }
+
+            secondsSinceLastEnvironmentalTick += Time.deltaTime;
+            if (secondsSinceLastEnvironmentalTick >= environmentalCadenceSeconds)
+            {
+                secondsSinceLastEnvironmentalTick = 0f;
+                SnapshotCache.LatestEnvironmental = EnvironmentalSnapshotCollector.Collect(environmentalSectorSizeCells);
             }
         }
 

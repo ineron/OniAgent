@@ -12,6 +12,8 @@ namespace OniAgent.Settings
         private const int MinCadenceSeconds = 5;
         private const int MinPushCadenceSeconds = 60;
         private const int MinCriticalCadenceSeconds = 1;
+        private const int MinEnvironmentalCadenceSeconds = 60;
+        private const int MinEnvironmentalSectorSizeCells = 1;
 
         public static AgentSettings Load()
         {
@@ -66,11 +68,27 @@ namespace OniAgent.Settings
                 settings.CriticalCadenceSeconds = MinCriticalCadenceSeconds;
             }
 
+            if (settings.EnvironmentalCadenceSeconds < MinEnvironmentalCadenceSeconds)
+            {
+                Debug.LogWarning("[OniAgent] EnvironmentalCadenceSeconds " + settings.EnvironmentalCadenceSeconds
+                    + " below minimum, clamping to " + MinEnvironmentalCadenceSeconds);
+                settings.EnvironmentalCadenceSeconds = MinEnvironmentalCadenceSeconds;
+            }
+
+            if (settings.EnvironmentalSectorSizeCells < MinEnvironmentalSectorSizeCells)
+            {
+                Debug.LogWarning("[OniAgent] EnvironmentalSectorSizeCells " + settings.EnvironmentalSectorSizeCells
+                    + " below minimum, clamping to " + MinEnvironmentalSectorSizeCells);
+                settings.EnvironmentalSectorSizeCells = MinEnvironmentalSectorSizeCells;
+            }
+
             Debug.Log("[OniAgent] Settings loaded: endpoint=" + settings.LedgyxEndpoint
                 + ", apiKeySet=" + !string.IsNullOrEmpty(settings.ApiKey)
                 + ", operationalCadenceSeconds=" + settings.OperationalCadenceSeconds
                 + ", criticalCadenceSeconds=" + settings.CriticalCadenceSeconds
                 + ", pushCadenceSeconds=" + settings.PushCadenceSeconds
+                + ", environmentalCadenceSeconds=" + settings.EnvironmentalCadenceSeconds
+                + ", environmentalSectorSizeCells=" + settings.EnvironmentalSectorSizeCells
                 + ", sseEndpoint=" + settings.SseEndpoint
                 + ", sseTokenSet=" + !string.IsNullOrEmpty(settings.SseToken)
                 + ", criticalEventsEndpoint=" + settings.CriticalEventsEndpoint);

@@ -10,7 +10,14 @@ namespace OniAgent.Snapshot
     {
         public static int WorldIdAt(Vector3 position)
         {
-            var cell = Grid.PosToCell(position);
+            return WorldIdAtCell(Grid.PosToCell(position));
+        }
+
+        // Cell-index overload for callers that already have the cell (e.g.
+        // EnvironmentalSnapshotCollector, which walks every cell directly) —
+        // avoids a redundant position round-trip through Grid.PosToCell.
+        public static int WorldIdAtCell(int cell)
+        {
             if (!Grid.IsValidCell(cell))
             {
                 return -1;

@@ -15,5 +15,7 @@ namespace OniAgent.Snapshot
         // tick that produces new events (never mutated in place), same
         // pattern as the other two fields.
         public static volatile CriticalEventResponse RecentCriticalEvents;
+
+        public static volatile EnvironmentalSnapshotResponse LatestEnvironmental;
     }
 }

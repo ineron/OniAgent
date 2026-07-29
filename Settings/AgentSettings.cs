@@ -50,5 +50,19 @@ namespace OniAgent.Settings
         // CriticalEventPushClient (event-driven queue+worker, not a cron
         // timer like LedgyxPushClient).
         public string CriticalEventsEndpoint = "";
+
+        // Task #10's environmental tier (EnvironmentalSnapshotCollector) is
+        // periodic sampling, not change-detection — a much slower default
+        // than the other two cadences, since tile temp/mass/element only
+        // needs coarse tracking over time, not near-real-time reaction.
+        // Minimum enforced in SnapshotTicker mirrors the other cadence
+        // knobs' pattern.
+        public int EnvironmentalCadenceSeconds = 900;
+
+        // Sector chunk edge length in cells for the environmental tier — see
+        // EnvironmentalSnapshotCollector.DefaultSectorSizeCells for the
+        // reasoning behind the default. Push endpoint deferred to a future
+        // task, same as SSE (#8); this tier is local-poll-only for now.
+        public int EnvironmentalSectorSizeCells = Snapshot.EnvironmentalSnapshotCollector.DefaultSectorSizeCells;
     }
 }

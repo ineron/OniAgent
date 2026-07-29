@@ -97,6 +97,18 @@ namespace OniAgent
                 return;
             }
 
+            if (request.HttpMethod == "GET" && request.Url.AbsolutePath == "/api/snapshot/environmental")
+            {
+                var snapshot = SnapshotCache.LatestEnvironmental
+                    ?? new EnvironmentalSnapshotResponse
+                    {
+                        SchemaVersion = EnvironmentalSnapshotCollector.SchemaVersion,
+                        SectorSizeCells = settings.EnvironmentalSectorSizeCells,
+                    };
+                WriteJson(response, snapshot);
+                return;
+            }
+
             if (request.HttpMethod == "GET" && request.Url.AbsolutePath == "/api/settings")
             {
                 WriteJson(response, new
