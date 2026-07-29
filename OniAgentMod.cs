@@ -12,6 +12,7 @@ namespace OniAgent
         private static ApiServer apiServer;
         private static LedgyxPushClient pushClient;
         private static CriticalEventPushClient criticalEventPushClient;
+        private static EnvironmentalPushClient environmentalPushClient;
 
         public override void OnLoad(Harmony harmony)
         {
@@ -39,6 +40,9 @@ namespace OniAgent
 
             pushClient = new LedgyxPushClient(settings);
             pushClient.Start();
+
+            environmentalPushClient = new EnvironmentalPushClient(settings);
+            environmentalPushClient.Start();
 
             Debug.Log("[OniAgent] OnLoad: mod loaded successfully.");
         }

@@ -14,6 +14,7 @@ namespace OniAgent.Settings
         private const int MinCriticalCadenceSeconds = 1;
         private const int MinEnvironmentalCadenceSeconds = 60;
         private const int MinEnvironmentalSectorSizeCells = 1;
+        private const int MinEnvironmentalPushCadenceSeconds = 60;
 
         public static AgentSettings Load()
         {
@@ -82,6 +83,13 @@ namespace OniAgent.Settings
                 settings.EnvironmentalSectorSizeCells = MinEnvironmentalSectorSizeCells;
             }
 
+            if (settings.EnvironmentalPushCadenceSeconds < MinEnvironmentalPushCadenceSeconds)
+            {
+                Debug.LogWarning("[OniAgent] EnvironmentalPushCadenceSeconds " + settings.EnvironmentalPushCadenceSeconds
+                    + " below minimum, clamping to " + MinEnvironmentalPushCadenceSeconds);
+                settings.EnvironmentalPushCadenceSeconds = MinEnvironmentalPushCadenceSeconds;
+            }
+
             Debug.Log("[OniAgent] Settings loaded: endpoint=" + settings.LedgyxEndpoint
                 + ", apiKeySet=" + !string.IsNullOrEmpty(settings.ApiKey)
                 + ", operationalCadenceSeconds=" + settings.OperationalCadenceSeconds
@@ -89,6 +97,8 @@ namespace OniAgent.Settings
                 + ", pushCadenceSeconds=" + settings.PushCadenceSeconds
                 + ", environmentalCadenceSeconds=" + settings.EnvironmentalCadenceSeconds
                 + ", environmentalSectorSizeCells=" + settings.EnvironmentalSectorSizeCells
+                + ", environmentalEndpoint=" + settings.EnvironmentalEndpoint
+                + ", environmentalPushCadenceSeconds=" + settings.EnvironmentalPushCadenceSeconds
                 + ", sseEndpoint=" + settings.SseEndpoint
                 + ", sseTokenSet=" + !string.IsNullOrEmpty(settings.SseToken)
                 + ", criticalEventsEndpoint=" + settings.CriticalEventsEndpoint);

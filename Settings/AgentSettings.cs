@@ -61,8 +61,21 @@ namespace OniAgent.Settings
 
         // Sector chunk edge length in cells for the environmental tier — see
         // EnvironmentalSnapshotCollector.DefaultSectorSizeCells for the
-        // reasoning behind the default. Push endpoint deferred to a future
-        // task, same as SSE (#8); this tier is local-poll-only for now.
+        // reasoning behind the default.
         public int EnvironmentalSectorSizeCells = Snapshot.EnvironmentalSnapshotCollector.DefaultSectorSizeCells;
+
+        // Task #15's environmental tier push (EnvironmentalPushClient) needs
+        // its own Ledgyx table/endpoint, same reasoning as
+        // CriticalEventsEndpoint. Reuses ApiKey/X-API-Key auth, same as the
+        // critical tier's push side.
+        public string EnvironmentalEndpoint = "";
+
+        // Separate from EnvironmentalCadenceSeconds (collection) on purpose:
+        // this is the push-to-Ledgyx cadence, quota-metered per push the
+        // same way PushCadenceSeconds is for the operational tier. Defaults
+        // to a few minutes since the environmental tier already samples
+        // slowly (900s default); pushing faster than collection just wastes
+        // quota resending an unchanged cached snapshot.
+        public int EnvironmentalPushCadenceSeconds = 300;
     }
 }

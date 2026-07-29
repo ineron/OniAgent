@@ -94,6 +94,18 @@ namespace OniAgent.Networking
                     }
                 }
             }
+            catch (ThreadAbortException)
+            {
+                // Unity aborts still-live background threads on domain/process
+                // teardown (e.g. quitting the game while this thread is
+                // blocked in GetConsumingEnumerable()). The CLR auto-rethrows
+                // ThreadAbortException at the end of any catch block unless
+                // ResetAbort() is called here — and an unhandled exception on
+                // a non-main thread crashes the whole process by default in
+                // .NET, not just this thread. This isn't an error, so it's
+                // swallowed rather than logged.
+                Thread.ResetAbort();
+            }
             catch (Exception e)
             {
                 Debug.LogError("[OniAgent] CriticalEventPushClient worker crashed: " + e);
