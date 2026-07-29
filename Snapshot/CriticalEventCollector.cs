@@ -53,6 +53,8 @@ namespace OniAgent.Snapshot
             = new Dictionary<string, int>();
         private static readonly Dictionary<string, int> lastOxygenTier
             = new Dictionary<string, int>();
+        private static readonly Dictionary<string, int> lastHungerTier
+            = new Dictionary<string, int>();
         private static readonly Dictionary<string, bool> lastDeadTag
             = new Dictionary<string, bool>();
         private static readonly Dictionary<string, bool> lastConsumerPowered
@@ -191,6 +193,34 @@ namespace OniAgent.Snapshot
                         });
                     }
                     lastOxygenTier[id] = tier;
+                }
+
+                // Hunger mirrors the oxygen tier exactly: satisfied ->
+                // hungry -> starving, read via CalorieMonitor.Instance's own
+                // IsHungry()/IsStarving() (confirmed via decompile of
+                // CalorieMonitor.cs) rather than hardcoding calorie
+                // thresholds. Actual starvation death is NOT handled here —
+                // CalorieMonitor's "depleted" state already calls
+                // DeathMonitor.Instance.Kill(Deaths.Starvation), which sets
+                // GameTags.Dead and is caught by CollectDeathEvents, same as
+                // every other cause of death.
+                var calorieSmi = identity.GetSMI<CalorieMonitor.Instance>();
+                if (calorieSmi != null)
+                {
+                    var tier = calorieSmi.IsStarving() ? 2 : (calorieSmi.IsHungry() ? 1 : 0);
+                    var previousTier = lastHungerTier.TryGetValue(id, out var seenTier) ? seenTier : 0;
+                    if (tier > previousTier)
+                    {
+                        events.Add(new CriticalEvent
+                        {
+                            EventType = tier == 2 ? "DuplicantStarving" : "DuplicantHungry",
+                            EntityId = id,
+                            EntityName = name,
+                            WorldId = worldId,
+                            CapturedAt = now,
+                        });
+                    }
+                    lastHungerTier[id] = tier;
                 }
             }
         }
