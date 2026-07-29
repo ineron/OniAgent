@@ -18,6 +18,11 @@ namespace OniAgent.Snapshot
         public List<string> MasteredSkillIds = new List<string>();
         public List<string> TraitIds = new List<string>();
         public List<EffectSnapshot> Effects = new List<EffectSnapshot>();
+        public List<AttributeSnapshot> Attributes = new List<AttributeSnapshot>();
+
+        // Unspent skill points (MinionResume.AvailableSkillpoints): earned via
+        // experience, minus points already spent mastering skills.
+        public int AvailableSkillPoints;
     }
 
     public class EffectSnapshot
@@ -25,6 +30,13 @@ namespace OniAgent.Snapshot
         public string Id;
         public string Name;
         public float TimeRemaining;
+    }
+
+    public class AttributeSnapshot
+    {
+        public string Id;
+        public string Name;
+        public float Value;
     }
 
     public class DuplicantSnapshotResponse

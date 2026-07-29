@@ -8,7 +8,9 @@ namespace OniAgent.Snapshot
     public static class SnapshotCollector
     {
         // v2 added WorldId for Spaced Out cluster support.
-        public const int SchemaVersion = 2;
+        // v3 added duplicant skill Attributes (Athletics/Strength/Cooking/etc.)
+        // and AvailableSkillPoints.
+        public const int SchemaVersion = 3;
 
         public static DuplicantSnapshotResponse CollectDuplicants()
         {
@@ -47,6 +49,26 @@ namespace OniAgent.Snapshot
             {
                 snapshot.Health = modifiers.amounts.Get(Db.Get().Amounts.HitPoints)?.value ?? 0f;
                 snapshot.Stress = modifiers.amounts.Get(Db.Get().Amounts.Stress)?.value ?? 0f;
+
+                // Only the trainable "profession" attributes (Athletics, Strength,
+                // Cooking, etc. — the ones shown on the Skills screen), not the much
+                // larger set of internal bookkeeping attributes (deltas, expectations)
+                // that Modifiers.attributes also carries.
+                if (modifiers.attributes != null)
+                {
+                    foreach (var attributeInstance in modifiers.attributes)
+                    {
+                        if (attributeInstance.Attribute.IsTrainable && attributeInstance.Attribute.IsProfession)
+                        {
+                            snapshot.Attributes.Add(new AttributeSnapshot
+                            {
+                                Id = attributeInstance.Id,
+                                Name = attributeInstance.Name,
+                                Value = attributeInstance.GetTotalValue(),
+                            });
+                        }
+                    }
+                }
             }
 
             var currentChore = choreDriver?.GetCurrentChore();
@@ -66,6 +88,8 @@ namespace OniAgent.Snapshot
                         snapshot.MasteredSkillIds.Add(kv.Key);
                     }
                 }
+
+                snapshot.AvailableSkillPoints = resume.AvailableSkillpoints;
             }
 
             if (effects != null)
