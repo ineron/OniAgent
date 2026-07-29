@@ -14,6 +14,16 @@ namespace OniAgent.Settings
         public string ApiKey = "";
         public int OperationalCadenceSeconds = 60;
 
+        // How often CriticalEventCollector.Collect() runs — deliberately
+        // decoupled from OperationalCadenceSeconds. Fast-moving dangers
+        // (oxygen depletion above all: a duplicant can go from fine to
+        // suffocating within one operational tick) need a much tighter
+        // polling loop than the colony/duplicant snapshot does, and since
+        // CriticalEventPushClient already pushes each new event immediately
+        // on detection (no cadence of its own), this setting is the actual
+        // end-to-end reaction-time knob for the critical tier.
+        public int CriticalCadenceSeconds = 2;
+
         // How often the cached snapshot is POSTed to Ledgyx. Kept separate
         // from OperationalCadenceSeconds (which can go down to a 5s minimum
         // for local /api/snapshot/* polling) because Ledgyx's ingestion

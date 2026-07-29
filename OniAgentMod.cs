@@ -27,7 +27,7 @@ namespace OniAgent
             var runner = new GameObject("OniAgentRunner");
             Object.DontDestroyOnLoad(runner);
             var ticker = runner.AddComponent<SnapshotTicker>();
-            ticker.Configure(settings.OperationalCadenceSeconds, criticalEventPushClient);
+            ticker.Configure(settings.OperationalCadenceSeconds, settings.CriticalCadenceSeconds, criticalEventPushClient);
 
             apiServer = new ApiServer(settings);
             apiServer.Start();

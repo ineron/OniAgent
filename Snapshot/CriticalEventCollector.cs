@@ -51,6 +51,10 @@ namespace OniAgent.Snapshot
             = new Dictionary<string, int>();
         private static readonly Dictionary<string, int> lastSicknessTier
             = new Dictionary<string, int>();
+        private static readonly Dictionary<string, int> lastOxygenTier
+            = new Dictionary<string, int>();
+        private static readonly Dictionary<string, bool> lastDeadTag
+            = new Dictionary<string, bool>();
         private static readonly Dictionary<string, bool> lastConsumerPowered
             = new Dictionary<string, bool>();
         private static Dictionary<string, BuildingMeta> lastBuildings
@@ -69,12 +73,23 @@ namespace OniAgent.Snapshot
             var now = System.DateTime.UtcNow.ToString("o");
 
             CollectDuplicantEvents(events, now);
+            CollectDeathEvents(events, now);
             CollectBuildingDestroyedEvents(events, now);
             CollectPowerOutageEvents(events, now);
 
             return events;
         }
 
+        // Health.State realistically never reaches Dead in practice — traced
+        // via decompile (Health.cs): hitpoint depletion routes through
+        // Incapacitate() instead, and non-HP deaths (stress, sickness,
+        // suffocation, etc.) kill via DeathMonitor.Instance.Kill(...)
+        // directly, which never touches Health.State at all. So the old
+        // `state == Health.HealthState.Dead` branch here was dead code —
+        // confirmed by a real drowning death producing zero notification.
+        // Actual death is now handled separately by CollectDeathEvents,
+        // which watches GameTags.Dead (the tag DeathMonitor's "dead" state
+        // adds, universally, regardless of cause of death).
         private static void CollectDuplicantEvents(List<CriticalEvent> events, string now)
         {
             foreach (var identity in Components.LiveMinionIdentities.Items)
@@ -92,8 +107,7 @@ namespace OniAgent.Snapshot
                         : Health.HealthState.Perfect;
                     if (previousState != state
                         && (state == Health.HealthState.Critical
-                            || state == Health.HealthState.Incapacitated
-                            || state == Health.HealthState.Dead))
+                            || state == Health.HealthState.Incapacitated))
                     {
                         events.Add(new CriticalEvent
                         {
@@ -149,6 +163,72 @@ namespace OniAgent.Snapshot
                     }
                     lastSicknessTier[id] = tier;
                 }
+
+                // Oxygen is the fastest-moving danger this tier tracks — a
+                // duplicant can go from fine to suffocating within a single
+                // polling interval — so this is reported as an early-warning
+                // tier (low oxygen, then actively suffocating) well before
+                // SuffocationMonitor's own "death" state fires
+                // DeathMonitor.Instance.Kill(Deaths.Suffocation), which
+                // CollectDeathEvents catches separately. Tier thresholds
+                // mirror SuffocationMonitor's own state machine (satisfied ->
+                // satisfied.low -> noOxygen.holdingbreath/suffocating) rather
+                // than hardcoding breath-meter values.
+                var suffocationSmi = identity.GetSMI<SuffocationMonitor.Instance>();
+                if (suffocationSmi != null)
+                {
+                    var tier = suffocationSmi.IsSuffocating() ? 2 : (!suffocationSmi.CanBreath() ? 1 : 0);
+                    var previousTier = lastOxygenTier.TryGetValue(id, out var seenTier) ? seenTier : 0;
+                    if (tier > previousTier)
+                    {
+                        events.Add(new CriticalEvent
+                        {
+                            EventType = tier == 2 ? "DuplicantSuffocating" : "DuplicantLowOxygen",
+                            EntityId = id,
+                            EntityName = name,
+                            WorldId = worldId,
+                            CapturedAt = now,
+                        });
+                    }
+                    lastOxygenTier[id] = tier;
+                }
+            }
+        }
+
+        // Deliberately iterates Components.MinionIdentities (every minion
+        // ever spawned this session, live or dead) rather than
+        // LiveMinionIdentities: MinionIdentity.OnDied is subscribed to
+        // GameTags.Dead being added and removes the identity from
+        // LiveMinionIdentities synchronously, in the same game-event tick
+        // that the tag is added — so by the time this collector's next poll
+        // runs, a duplicant who just died is already gone from the live
+        // list and their death is never observed. MinionIdentities is only
+        // pruned later, in OnCleanUp/OnQueueDestroyObject (full GameObject
+        // destruction, e.g. cremation/burial), so a corpse stays visible to
+        // this loop long enough for the next poll to catch the transition.
+        // Confirmed via decompile after a real drowning death produced no
+        // event under the previous Health.State-based check (see
+        // CollectDuplicantEvents' header comment).
+        private static void CollectDeathEvents(List<CriticalEvent> events, string now)
+        {
+            foreach (var identity in Components.MinionIdentities.Items)
+            {
+                var id = identity.GetInstanceID().ToString();
+                var isDead = identity.gameObject.HasTag(GameTags.Dead);
+                var wasDead = lastDeadTag.TryGetValue(id, out var seenDead) && seenDead;
+
+                if (isDead && !wasDead)
+                {
+                    events.Add(new CriticalEvent
+                    {
+                        EventType = "DuplicantDied",
+                        EntityId = id,
+                        EntityName = identity.GetProperName(),
+                        WorldId = WorldLookup.WorldIdAt(identity.transform.position),
+                        CapturedAt = now,
+                    });
+                }
+                lastDeadTag[id] = isDead;
             }
         }
 
