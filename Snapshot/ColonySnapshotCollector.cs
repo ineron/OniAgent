@@ -9,13 +9,14 @@ namespace OniAgent.Snapshot
     {
         // v2 added WorldId to buildings/power entities and the Worlds/Rockets
         // lists for Spaced Out cluster support.
-        public const int SchemaVersion = 2;
+        // v3 added Cycle.
+        public const int SchemaVersion = 3;
 
         private static readonly Regex RichTextTag = new Regex("<.*?>", RegexOptions.Compiled);
 
         public static ColonySnapshot Collect()
         {
-            var snapshot = new ColonySnapshot { SchemaVersion = SchemaVersion };
+            var snapshot = new ColonySnapshot { SchemaVersion = SchemaVersion, Cycle = CycleLookup.CurrentCycle() };
 
             foreach (var building in Components.BuildingCompletes.Items)
             {

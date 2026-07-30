@@ -76,7 +76,7 @@ namespace OniAgent
             if (request.HttpMethod == "GET" && request.Url.AbsolutePath == "/api/snapshot/duplicants")
             {
                 var snapshot = SnapshotCache.LatestDuplicants
-                    ?? new DuplicantSnapshotResponse { SchemaVersion = SnapshotCollector.SchemaVersion };
+                    ?? new DuplicantSnapshotResponse { SchemaVersion = SnapshotCollector.SchemaVersion, Cycle = -1 };
                 WriteJson(response, snapshot);
                 return;
             }
@@ -84,7 +84,7 @@ namespace OniAgent
             if (request.HttpMethod == "GET" && request.Url.AbsolutePath == "/api/snapshot/colony")
             {
                 var snapshot = SnapshotCache.LatestColony
-                    ?? new ColonySnapshot { SchemaVersion = ColonySnapshotCollector.SchemaVersion };
+                    ?? new ColonySnapshot { SchemaVersion = ColonySnapshotCollector.SchemaVersion, Cycle = -1 };
                 WriteJson(response, snapshot);
                 return;
             }
@@ -103,6 +103,7 @@ namespace OniAgent
                     ?? new EnvironmentalSnapshotResponse
                     {
                         SchemaVersion = EnvironmentalSnapshotCollector.SchemaVersion,
+                        Cycle = -1,
                         SectorSizeCells = settings.EnvironmentalSectorSizeCells,
                     };
                 WriteJson(response, snapshot);

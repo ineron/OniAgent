@@ -10,11 +10,16 @@ namespace OniAgent.Snapshot
         // v2 added WorldId for Spaced Out cluster support.
         // v3 added duplicant skill Attributes (Athletics/Strength/Cooking/etc.)
         // and AvailableSkillPoints.
-        public const int SchemaVersion = 3;
+        // v4 added Cycle.
+        public const int SchemaVersion = 4;
 
         public static DuplicantSnapshotResponse CollectDuplicants()
         {
-            var response = new DuplicantSnapshotResponse { SchemaVersion = SchemaVersion };
+            var response = new DuplicantSnapshotResponse
+            {
+                SchemaVersion = SchemaVersion,
+                Cycle = CycleLookup.CurrentCycle(),
+            };
 
             foreach (var identity in Components.LiveMinionIdentities.Items)
             {

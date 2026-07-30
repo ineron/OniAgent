@@ -16,6 +16,9 @@ namespace OniAgent.Snapshot
     {
         public int SchemaVersion;
 
+        // In-game cycle number (GameClock.GetCycle()) — see ColonySnapshot.Cycle.
+        public int Cycle;
+
         // Sector chunk edge length in cells, so a consumer can turn
         // SectorX/SectorY back into a cell-space bounding box:
         // [SectorX*SectorSizeCells, (SectorX+1)*SectorSizeCells) and same for Y.

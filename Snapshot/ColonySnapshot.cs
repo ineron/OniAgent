@@ -10,6 +10,13 @@ namespace OniAgent.Snapshot
     public class ColonySnapshot
     {
         public int SchemaVersion;
+
+        // In-game cycle number (GameClock.GetCycle()), not wall-clock time —
+        // lets a consumer detect a save reload back to an earlier cycle,
+        // which CapturedAt alone can't distinguish from normal progress.
+        // -1 if GameClock isn't available yet (e.g. main menu).
+        public int Cycle;
+
         public List<BuildingSnapshot> Buildings = new List<BuildingSnapshot>();
         public PowerSnapshot Power = new PowerSnapshot();
         public ResearchSnapshot Research = new ResearchSnapshot();

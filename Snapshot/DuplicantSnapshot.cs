@@ -42,6 +42,10 @@ namespace OniAgent.Snapshot
     public class DuplicantSnapshotResponse
     {
         public int SchemaVersion;
+
+        // In-game cycle number (GameClock.GetCycle()) — see ColonySnapshot.Cycle.
+        public int Cycle;
+
         public List<DuplicantSnapshot> Duplicants = new List<DuplicantSnapshot>();
     }
 }

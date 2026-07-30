@@ -13,7 +13,8 @@ namespace OniAgent.Snapshot
     // PrimaryElement.ElementID exposes elsewhere in this mod).
     public static class EnvironmentalSnapshotCollector
     {
-        public const int SchemaVersion = 1;
+        // v2 added Cycle.
+        public const int SchemaVersion = 2;
 
         // Default sector edge length in cells. A classic single-asteroid map
         // is roughly 256x384 cells; at 32 cells/side that's ~8x12 = 96
@@ -54,6 +55,7 @@ namespace OniAgent.Snapshot
             var response = new EnvironmentalSnapshotResponse
             {
                 SchemaVersion = SchemaVersion,
+                Cycle = CycleLookup.CurrentCycle(),
                 SectorSizeCells = sectorSizeCells,
             };
 

@@ -17,7 +17,8 @@ namespace OniAgent.Snapshot
     // hands each new batch of events to as soon as Collect() returns them.
     public static class CriticalEventCollector
     {
-        public const int SchemaVersion = 1;
+        // v2 added Cycle.
+        public const int SchemaVersion = 2;
 
         // Previous-tick state, keyed by the same GetInstanceID()-based ids
         // used elsewhere in this mod. An id absent from the "last" map means
@@ -78,6 +79,15 @@ namespace OniAgent.Snapshot
             CollectDeathEvents(events, now);
             CollectBuildingDestroyedEvents(events, now);
             CollectPowerOutageEvents(events, now);
+
+            // Set once for the whole batch rather than threading it through
+            // every helper alongside `now` — a batch spans at most a few
+            // seconds of real time, never a cycle boundary in practice.
+            var cycle = CycleLookup.CurrentCycle();
+            foreach (var evt in events)
+            {
+                evt.Cycle = cycle;
+            }
 
             return events;
         }

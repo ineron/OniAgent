@@ -134,6 +134,7 @@ namespace OniAgent.Networking
             var trimmed = new ColonySnapshot
             {
                 SchemaVersion = source.SchemaVersion,
+                Cycle = source.Cycle,
                 Research = source.Research,
                 Worlds = source.Worlds,
                 Rockets = source.Rockets,
