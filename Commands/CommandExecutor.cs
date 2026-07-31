@@ -38,6 +38,10 @@ namespace OniAgent.Commands
                         return Build(item, originCell);
                     case "set_paused":
                         return SetPaused(item);
+                    case "demolish":
+                        return Demolish(item, originCell);
+                    case "cancel_dig":
+                        return CancelDig(item, originCell);
                     default:
                         return CommandItemResult.Fail(item, "Unknown command type: " + item.Type);
                 }
@@ -224,6 +228,93 @@ namespace OniAgent.Commands
             }
 
             return CommandItemResult.Success(item, item.Paused ? "paused" : "unpaused");
+        }
+
+        // Deconstructs the building at (X,Y) — same anchor-cell addressing
+        // as "build". Queues the real deconstruct chore (WorkChore, worked
+        // by a duplicant over time), the same entry point the real
+        // right-click "Deconstruct" UI action uses (DeconstructTool.
+        // DeconstructCell triggers the same event hash rather than calling
+        // Deconstructable.QueueDeconstruction directly), so it goes
+        // through the same allowDeconstruction gate the UI does. This
+        // does not instantly remove the building.
+        private static CommandItemResult Demolish(CommandItem item, int originCell)
+        {
+            Grid.CellToXY(originCell, out int ox, out int oy);
+            int cell = Grid.XYToCell(ox + item.X, oy + item.Y);
+            if (!Grid.IsValidCell(cell))
+            {
+                return CommandItemResult.Fail(item, "Invalid cell for demolish at offset (" + item.X + "," + item.Y + ")");
+            }
+
+            var buildingGo = Grid.Objects[cell, (int)ObjectLayer.Building];
+            if (buildingGo == null)
+            {
+                return CommandItemResult.Fail(item, "No building at offset (" + item.X + "," + item.Y + ")");
+            }
+
+            var deconstructable = buildingGo.GetComponent<Deconstructable>();
+            if (deconstructable == null)
+            {
+                return CommandItemResult.Fail(item, "Building at offset (" + item.X + "," + item.Y + ") has no Deconstructable component — cannot be demolished");
+            }
+            if (!deconstructable.allowDeconstruction)
+            {
+                return CommandItemResult.Fail(item, "Building at offset (" + item.X + "," + item.Y + ") does not allow deconstruction");
+            }
+            if (deconstructable.IsMarkedForDeconstruction())
+            {
+                return CommandItemResult.Success(item, "already queued for deconstruction");
+            }
+
+            buildingGo.Trigger(-790448070);
+            return CommandItemResult.Success(item, "demolish: queued deconstruction of building at offset (" + item.X + "," + item.Y + ")");
+        }
+
+        // Cancels pending dig orders over the inclusive rectangle
+        // [X1,X2] x [Y1,Y2] — same rectangle addressing as "dig_rect", so
+        // an agent can undo a dig_rect batch by resending the same
+        // coordinates as a cancel_dig. Diggable.chore is assigned
+        // unconditionally in Diggable.OnSpawn (even before a duplicant
+        // starts working it), so it's always safe to cancel directly —
+        // same object Diggable.GetDiggable(cell) reads via
+        // Grid.Objects[cell, ObjectLayer.DigPlacer]. Only cancels the
+        // order; already-excavated cells have no Diggable left to cancel.
+        private static CommandItemResult CancelDig(CommandItem item, int originCell)
+        {
+            Grid.CellToXY(originCell, out int ox, out int oy);
+            int cancelled = 0;
+            int skipped = 0;
+
+            int xLo = System.Math.Min(item.X1, item.X2);
+            int xHi = System.Math.Max(item.X1, item.X2);
+            int yLo = System.Math.Min(item.Y1, item.Y2);
+            int yHi = System.Math.Max(item.Y1, item.Y2);
+
+            for (int x = xLo; x <= xHi; x++)
+            {
+                for (int y = yLo; y <= yHi; y++)
+                {
+                    int cell = Grid.XYToCell(ox + x, oy + y);
+                    if (!Grid.IsValidCell(cell))
+                    {
+                        skipped++;
+                        continue;
+                    }
+
+                    var diggable = Diggable.GetDiggable(cell);
+                    if (diggable == null || diggable.chore == null)
+                    {
+                        skipped++;
+                        continue;
+                    }
+
+                    diggable.chore.Cancel("Cancelled via agent command");
+                    cancelled++;
+                }
+            }
+
+            return CommandItemResult.Success(item, $"cancel_dig: cancelled {cancelled} cell(s), skipped {skipped} (no pending dig order)");
         }
     }
 }

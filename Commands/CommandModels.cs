@@ -4,8 +4,10 @@ namespace OniAgent.Commands
 {
     // One instruction in a batch. Not every field applies to every Type —
     // "dig_rect" uses X1/X2/Y1/Y2, "build" uses Building/X/Y, "set_paused"
-    // uses Paused. All coordinates are cell offsets relative to the
-    // batch's origin (the Duplicant Printing Pod), not absolute world
+    // uses Paused, "demolish" uses X/Y (same as build — the building's
+    // anchor cell), "cancel_dig" uses X1/X2/Y1/Y2 (same as dig_rect — the
+    // rectangle to un-mark). All coordinates are cell offsets relative to
+    // the batch's origin (the Duplicant Printing Pod), not absolute world
     // cells — the caller doesn't know (and shouldn't need to know)
     // absolute grid coordinates.
     public class CommandItem
