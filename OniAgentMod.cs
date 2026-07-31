@@ -1,5 +1,6 @@
 using HarmonyLib;
 using KMod;
+using OniAgent.Commands;
 using OniAgent.Networking;
 using OniAgent.Settings;
 using OniAgent.Snapshot;
@@ -35,6 +36,8 @@ namespace OniAgent
                 settings.EnvironmentalCadenceSeconds,
                 settings.EnvironmentalSectorSizeCells,
                 criticalEventPushClient);
+
+            runner.AddComponent<CommandTicker>();
 
             apiServer = new ApiServer(settings);
             apiServer.Start();
