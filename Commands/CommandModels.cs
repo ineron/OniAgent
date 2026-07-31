@@ -3,10 +3,11 @@ using System.Collections.Generic;
 namespace OniAgent.Commands
 {
     // One instruction in a batch. Not every field applies to every Type —
-    // "dig_rect" uses X1/X2/Y1/Y2, "build" uses Building/X/Y. All
-    // coordinates are cell offsets relative to the batch's origin (the
-    // Duplicant Printing Pod), not absolute world cells — the caller
-    // doesn't know (and shouldn't need to know) absolute grid coordinates.
+    // "dig_rect" uses X1/X2/Y1/Y2, "build" uses Building/X/Y, "set_paused"
+    // uses Paused. All coordinates are cell offsets relative to the
+    // batch's origin (the Duplicant Printing Pod), not absolute world
+    // cells — the caller doesn't know (and shouldn't need to know)
+    // absolute grid coordinates.
     public class CommandItem
     {
         public string Type;
@@ -19,6 +20,8 @@ namespace OniAgent.Commands
         public string Building;
         public int X;
         public int Y;
+
+        public bool Paused;
     }
 
     public class CommandBatchRequest

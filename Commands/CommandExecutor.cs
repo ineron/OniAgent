@@ -36,6 +36,8 @@ namespace OniAgent.Commands
                         return DigRect(item, originCell);
                     case "build":
                         return Build(item, originCell);
+                    case "set_paused":
+                        return SetPaused(item);
                     default:
                         return CommandItemResult.Fail(item, "Unknown command type: " + item.Type);
                 }
@@ -189,6 +191,39 @@ namespace OniAgent.Commands
                 }
             }
             return true;
+        }
+
+        // SpeedControlScreen.Pause()/Unpause() are reference-counted via a
+        // private pauseCount (the game itself can nest pauses from
+        // multiple UI sources), not a plain boolean — calling Pause()
+        // while already paused just increments the count with no visible
+        // effect, and would need a matching extra Unpause() to undo. Guard
+        // on IsPaused so a repeated/retried set_paused with the same value
+        // is a no-op instead of drifting the counter out of sync with what
+        // the agent last requested.
+        private static CommandItemResult SetPaused(CommandItem item)
+        {
+            var screen = SpeedControlScreen.Instance;
+            if (screen == null)
+            {
+                return CommandItemResult.Fail(item, "SpeedControlScreen.Instance not found — game not fully loaded?");
+            }
+
+            if (item.Paused == screen.IsPaused)
+            {
+                return CommandItemResult.Success(item, "already " + (item.Paused ? "paused" : "running"));
+            }
+
+            if (item.Paused)
+            {
+                screen.Pause(playSound: false);
+            }
+            else
+            {
+                screen.Unpause(playSound: false);
+            }
+
+            return CommandItemResult.Success(item, item.Paused ? "paused" : "unpaused");
         }
     }
 }
