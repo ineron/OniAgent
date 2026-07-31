@@ -1,11 +1,20 @@
 # ONI Agent Plugin
 
-A mod for *Oxygen Not Included* that exposes live colony state over a local
-HTTP API and accepts control commands back — built as a demo of Ledgyx's
-agent+RAG infrastructure, using an ONI colony as a live sensor/actuator
-testbed. All reasoning happens in Ledgyx; this mod is a thin client: it
-collects snapshots, serves them locally, pushes them to Ledgyx, and applies
-whatever commands come back.
+A mod for *Oxygen Not Included* that turns a running colony into an
+observation + action interface for AI agents: it exposes live colony state
+over a local HTTP API (duplicants, buildings, resources, critical events,
+environment) and accepts a batch of control commands back (dig, build,
+pause/unpause), applied safely on Unity's main thread. The mod itself does
+no reasoning — any agent or framework that can make HTTP requests can poll
+state and issue commands, with no dependency on any particular backend.
+
+It happens to have first-class support for pushing snapshots to and
+receiving commands from **Ledgyx** (see [Optional: Ledgyx
+integration](#optional-ledgyx-integration) below) — that's what it was
+originally built to demo — but that integration is one client of the same
+plain HTTP API documented here, not a requirement. Point your own agent
+loop at the endpoints in [HTTP API](#http-api) and skip the Ledgyx-specific
+pieces entirely if you don't use it.
 
 ## Status
 
@@ -13,11 +22,35 @@ Both stages are live:
 
 - **Stage 1 (observation):** four snapshot tiers (duplicants, colony,
   critical events, environmental) collected on independent cadences, served
-  locally over HTTP, and pushed to Ledgyx.
+  locally over HTTP. Optionally also pushed to Ledgyx.
 - **Stage 2 (control):** a command queue accepts `dig_rect`, `build`, and
-  `set_paused` batches either via a direct local `POST /api/command` or via
-  Ledgyx's SSE channel (`oni_command` event type), and applies them on
-  Unity's main thread.
+  `set_paused` batches via a direct local `POST /api/command` — and, if
+  Ledgyx integration is configured, also via Ledgyx's SSE channel
+  (`oni_command` event type) — and applies them on Unity's main thread.
+
+## Using it with your own agent
+
+The mod's entire surface is the local HTTP API in [HTTP API](#http-api)
+below — nothing about it assumes Ledgyx, or any particular agent framework.
+A typical loop:
+
+1. **Observe** — `GET` one or more of the `/api/snapshot/*` endpoints to
+   read current colony/duplicant/environment state.
+2. **Decide** — your agent's own reasoning, outside this mod entirely.
+3. **Act** — `POST /api/command` with a batch of `dig_rect`/`build`/
+   `set_paused` items.
+4. **Confirm** — `GET /api/command/result?batch_id=...` to see what
+   actually happened (each item succeeds or fails independently, with a
+   message).
+
+That loop works standalone, with zero Ledgyx configuration. The optional
+Ledgyx push clients (`LedgyxPushClient`, `CriticalEventPushClient`,
+`EnvironmentalPushClient`) and the SSE client (`LedgyxSseClient`) all check
+their own settings (API key / endpoint / SSE token) before doing anything,
+and cleanly no-op with a one-time log warning if those are left blank in
+`settings.json` — you don't need to remove or disable any code to run this
+against your own agent instead, just leave the Ledgyx-specific fields
+empty.
 
 ## Architecture
 
@@ -43,7 +76,10 @@ Commands/
   CommandResultCache.cs     recent batch results, polled via
                            GET /api/command/result
 
-Networking/
+Networking/              optional — Ledgyx integration only, see
+                         "Optional: Ledgyx integration" below. Every client
+                         here no-ops (with a one-time log warning) if its
+                         settings are left unconfigured.
   LedgyxPushClient.cs        POSTs the operational-tier snapshot to Ledgyx
                               on a cron-style timer
   CriticalEventPushClient.cs  event-driven — pushes each critical event the
@@ -72,8 +108,9 @@ Key constraints baked into the design:
 - The HTTP listener runs on its own background thread; anything it receives
   that touches game state goes through `CommandQueue` first — `Grid`,
   `Assets`, and `BuildingDef.Build` are not thread-safe.
-- Every snapshot payload carries a `SchemaVersion`, since the same schema
-  doubles as the observation space Ledgyx's agent reasons over.
+- Every snapshot payload carries a `SchemaVersion`, since this schema is
+  meant to double as a stable observation space for whatever agent reasons
+  over it — Ledgyx's or your own.
 - Cached snapshot/response objects are never mutated in place after being
   published to `SnapshotCache` — a consumer reading mid-collection can't see
   a half-written object.
@@ -105,9 +142,12 @@ the machine running the game:
 ```
 
 (verify the exact path via the in-game Mod Manager). `settings.json` is
-written next to the DLL on first load with defaults — edit it in place to
-set `LedgyxEndpoint`, `ApiKey`, `SseEndpoint`/`SseToken`, and per-tier
-cadences before enabling the mod for real use.
+written next to the DLL on first load with defaults — the per-tier cadence
+fields are the only ones you need for standalone use against your own
+agent (see [Using it with your own agent](#using-it-with-your-own-agent)
+above). `LedgyxEndpoint`/`ApiKey`/`SseEndpoint`/`SseToken`/
+`CriticalEventsEndpoint`/`EnvironmentalEndpoint` only matter if you're
+using the optional Ledgyx integration — leave them blank otherwise.
 
 ## HTTP API
 
@@ -162,11 +202,6 @@ Supported command types:
 `GET /api/command/result?batch_id=...` — poll a specific batch's outcome.
 `GET /api/command/results` — 10 most recent batches, newest first.
 
-Commands also arrive via Ledgyx's SSE channel: `LedgyxSseClient` subscribes
-to the same stream used for agent-run results and forwards any `oni_command`
-event straight into `CommandQueue` — same entry point as the HTTP POST, same
-validation, same execution path.
-
 ### Manual testing
 
 `test-command.sh` sends a first-floor test batch (dig a room, build a ladder
@@ -178,6 +213,30 @@ ONI_AGENT_HOST=http://localhost:9813 ./test-command.sh
 
 Run it on the machine where the game and mod are actually running — the API
 only listens on localhost.
+
+## Optional: Ledgyx integration
+
+If you set `LedgyxEndpoint`/`ApiKey` (and, for the critical/environmental
+tiers, `CriticalEventsEndpoint`/`EnvironmentalEndpoint`) in `settings.json`,
+`LedgyxPushClient`/`CriticalEventPushClient`/`EnvironmentalPushClient` push
+the corresponding snapshot tiers to Ledgyx on their own cadences
+(`PushCadenceSeconds`, event-driven, `EnvironmentalPushCadenceSeconds`
+respectively). Ledgyx's ingestion channel fires one AI_AGENT run per row
+pushed, so this is the path that lets a Ledgyx-hosted agent actually reason
+over colony state.
+
+If you additionally set `SseEndpoint`/`SseToken`, `LedgyxSseClient` opens a
+persistent SSE connection back to Ledgyx and does two things with it:
+delivers agent-run results locally (`GET /api/agent-run/latest`), and
+forwards any `oni_command` SSE event straight into `CommandQueue` — the
+same entry point, validation, and execution path as a direct
+`POST /api/command`. In other words, a Ledgyx agent controls the colony by
+calling Ledgyx's own generic `send_sse_notification` tool with
+`event_type="oni_command"`, not a bespoke per-project tool.
+
+None of this is required for the observe/decide/act loop described in
+[Using it with your own agent](#using-it-with-your-own-agent) — it's purely
+how *this* project currently wires a Ledgyx-hosted agent to the same API.
 
 ## Known limitations
 
