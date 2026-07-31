@@ -11,14 +11,24 @@ using UnityEngine;
 namespace OniAgent.Networking
 {
     // Periodically POSTs the cached snapshot to Ledgyx. Runs off a
-    // System.Threading.Timer callback (a thread-pool thread), never the
-    // Unity main thread — HTTP latency must never touch the sim tick.
-    // BCL-only (HttpWebRequest), matching ApiServer.cs's no-external-HTTP-
-    // deps constraint on the inbound side.
+    // persistent background Thread (same pattern as CriticalEventPushClient/
+    // LedgyxSseClient), never the Unity main thread — HTTP latency must
+    // never touch the sim tick. BCL-only (HttpWebRequest), matching
+    // ApiServer.cs's no-external-HTTP-deps constraint on the inbound side.
+    //
+    // Was originally a System.Threading.Timer (ThreadPool callback) until a
+    // native Mono SEGV reported 2026-07-31 (thread 74, task #20): the crash
+    // log's "tick completed" line (added specifically to localize this) was
+    // present at crash time, and the crash reporter's own secondary fault
+    // was inside mono_threads_detach_coop — i.e. Mono detaching a ThreadPool
+    // worker thread right as it finished this callback. A persistent thread
+    // is never handed back to the pool for reclamation, so it doesn't hit
+    // that detach path on every cadence tick.
     public class LedgyxPushClient
     {
         private readonly AgentSettings settings;
-        private System.Threading.Timer timer;
+        private Thread worker;
+        private readonly ManualResetEventSlim stopSignal = new ManualResetEventSlim(false);
         private bool warnedMissingApiKey;
 
         public LedgyxPushClient(AgentSettings settings)
@@ -28,33 +38,50 @@ namespace OniAgent.Networking
 
         public void Start()
         {
-            var periodMs = settings.PushCadenceSeconds * 1000;
-            timer = new System.Threading.Timer(_ => Tick(), null, periodMs, periodMs);
+            worker = new Thread(Run) { IsBackground = true, Name = "OniAgentLedgyxPush" };
+            worker.Start();
             Debug.Log("[OniAgent] LedgyxPushClient started, cadence=" + settings.PushCadenceSeconds + "s");
         }
 
         public void Stop()
         {
-            timer?.Dispose();
-            timer = null;
+            stopSignal.Set();
+            worker?.Join(5000);
+            worker = null;
         }
 
-        // Never let an exception escape the timer callback — that would
-        // silently stop all future ticks with no error surfaced anywhere.
+        // stopSignal.Wait(periodMs) blocks for one cadence period unless
+        // Stop() sets the signal first, in which case it returns true
+        // immediately and the loop exits without waiting out the period —
+        // same responsiveness Timer.Dispose() used to give for free.
+        private void Run()
+        {
+            var periodMs = settings.PushCadenceSeconds * 1000;
+            while (!stopSignal.Wait(periodMs))
+            {
+                Tick();
+            }
+        }
+
+        // Never let an exception escape the loop — that would silently
+        // stop all future ticks with no error surfaced anywhere.
         //
-        // The start/completed bracket exists to localize a native Mono SEGV
-        // reported 2026-07-31 (thread 74) whose last log line before the
-        // crash was this client's own "push succeeded" — see task #20. If
-        // "tick completed" is missing from the log at crash time, the fault
-        // is inside this callback (Push/JSON/HTTP); if it's present, the
-        // fault happened after the ThreadPool callback returned, pointing
-        // at thread-pool/Mono teardown timing instead of this code.
+        // The start/completed bracket exists to localize the SEGV
+        // described above (task #20) — kept even after moving off Timer,
+        // since it's still useful evidence if a crash recurs.
         private void Tick()
         {
             Debug.Log("[OniAgent] LedgyxPushClient: tick started");
             try
             {
                 Push();
+            }
+            catch (ThreadAbortException)
+            {
+                // Unity aborts still-live background threads on domain/
+                // process teardown; not an error (same posture as
+                // CriticalEventPushClient/LedgyxSseClient).
+                Thread.ResetAbort();
             }
             catch (Exception e)
             {

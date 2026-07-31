@@ -1,6 +1,7 @@
 using System;
 using System.Net;
 using System.Text;
+using System.Threading;
 using Newtonsoft.Json;
 using OniAgent.Settings;
 using OniAgent.Snapshot;
@@ -8,17 +9,25 @@ using UnityEngine;
 
 namespace OniAgent.Networking
 {
-    // Environmental-tier counterpart to LedgyxPushClient: same cron-Timer,
-    // whole-snapshot-as-one-row shape (see EnvironmentalSnapshotPayload),
-    // just its own endpoint/cadence since this is a separate Ledgyx table
-    // pushed far less often. Deliberately NOT the critical tier's
-    // queue+worker pattern (CriticalEventPushClient) — that one exists
-    // because a missed critical event is genuinely lost, whereas a missed
-    // environmental push is superseded by the next periodic sample anyway.
+    // Environmental-tier counterpart to LedgyxPushClient: same persistent-
+    // thread cadence loop, whole-snapshot-as-one-row shape (see
+    // EnvironmentalSnapshotPayload), just its own endpoint/cadence since
+    // this is a separate Ledgyx table pushed far less often. Deliberately
+    // NOT the critical tier's queue+worker pattern (CriticalEventPushClient)
+    // — that one exists because a missed critical event is genuinely lost,
+    // whereas a missed environmental push is superseded by the next
+    // periodic sample anyway.
+    //
+    // Was originally a System.Threading.Timer (ThreadPool callback) until a
+    // native Mono SEGV reported 2026-07-31 (thread 74, task #20) implicated
+    // ThreadPool thread teardown — see LedgyxPushClient's header comment
+    // for the full reasoning; this client used the identical Timer pattern
+    // and is equally implicated, so it moved to the same fix.
     public class EnvironmentalPushClient
     {
         private readonly AgentSettings settings;
-        private System.Threading.Timer timer;
+        private Thread worker;
+        private readonly ManualResetEventSlim stopSignal = new ManualResetEventSlim(false);
         private bool warnedMissingConfig;
 
         public EnvironmentalPushClient(AgentSettings settings)
@@ -28,29 +37,43 @@ namespace OniAgent.Networking
 
         public void Start()
         {
-            var periodMs = settings.EnvironmentalPushCadenceSeconds * 1000;
-            timer = new System.Threading.Timer(_ => Tick(), null, periodMs, periodMs);
+            worker = new Thread(Run) { IsBackground = true, Name = "OniAgentEnvironmentalPush" };
+            worker.Start();
             Debug.Log("[OniAgent] EnvironmentalPushClient started, cadence=" + settings.EnvironmentalPushCadenceSeconds + "s");
         }
 
         public void Stop()
         {
-            timer?.Dispose();
-            timer = null;
+            stopSignal.Set();
+            worker?.Join(5000);
+            worker = null;
         }
 
-        // Never let an exception escape the timer callback — that would
-        // silently stop all future ticks with no error surfaced anywhere.
+        private void Run()
+        {
+            var periodMs = settings.EnvironmentalPushCadenceSeconds * 1000;
+            while (!stopSignal.Wait(periodMs))
+            {
+                Tick();
+            }
+        }
+
+        // Never let an exception escape the loop — that would silently
+        // stop all future ticks with no error surfaced anywhere.
         //
-        // Same start/completed bracket as LedgyxPushClient.Tick, added for
-        // the same reason (task #20) — this client uses the identical
-        // System.Threading.Timer pattern, so it's equally implicated.
+        // Start/completed bracket kept for the same reason as
+        // LedgyxPushClient.Tick (task #20) — still useful evidence if a
+        // crash recurs even after moving off Timer.
         private void Tick()
         {
             Debug.Log("[OniAgent] EnvironmentalPushClient: tick started");
             try
             {
                 Push();
+            }
+            catch (ThreadAbortException)
+            {
+                Thread.ResetAbort();
             }
             catch (Exception e)
             {
