@@ -3,6 +3,7 @@ using System.Net;
 using System.Text;
 using System.Threading;
 using Newtonsoft.Json;
+using OniAgent.Networking;
 using OniAgent.Settings;
 using OniAgent.Snapshot;
 using UnityEngine;
@@ -107,6 +108,14 @@ namespace OniAgent
                         SectorSizeCells = settings.EnvironmentalSectorSizeCells,
                     };
                 WriteJson(response, snapshot);
+                return;
+            }
+
+            if (request.HttpMethod == "GET" && request.Url.AbsolutePath == "/api/agent-run/latest")
+            {
+                var result = SnapshotCache.LatestAgentRunResult
+                    ?? new AgentRunResult { Cycle = -1 };
+                WriteJson(response, result);
                 return;
             }
 

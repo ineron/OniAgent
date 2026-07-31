@@ -31,12 +31,15 @@ namespace OniAgent.Settings
         // not just rate-limited — pushing every 5s would burn quota fast.
         public int PushCadenceSeconds = 60;
 
-        // Task #8 (SSE client, not yet built). Separate endpoint/credential
+        // Task #8, consumed by LedgyxSseClient. Separate endpoint/credential
         // from LedgyxEndpoint/ApiKey because SSE auth is token-in-query-string
         // (confirmed against the working Obsidian sse-notes-receiver plugin —
         // see oni-obsidian-sse-plugin-reference), not the X-API-Key header
         // used by the push side. Temporary per that same decision: Ledgyx SSE
         // auth is expected to move to a header later, matching ApiKey.
+        // SseEndpoint is a single shared stream, not one scoped to ONI by URL
+        // path — LedgyxSseClient filters incoming frames by channel="oni"
+        // itself, so no channel needs to be baked into this URL.
         public string SseEndpoint = "";
         public string SseToken = "";
 

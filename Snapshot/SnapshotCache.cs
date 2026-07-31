@@ -1,3 +1,5 @@
+using OniAgent.Networking;
+
 namespace OniAgent.Snapshot
 {
     // Written only by SnapshotTicker (Unity main thread), read only by
@@ -17,5 +19,10 @@ namespace OniAgent.Snapshot
         public static volatile CriticalEventResponse RecentCriticalEvents;
 
         public static volatile EnvironmentalSnapshotResponse LatestEnvironmental;
+
+        // Written by LedgyxSseClient's own background thread (not the Unity
+        // main thread, unlike the fields above), read by ApiServer's
+        // listener thread. Same no-lock/never-mutate-in-place posture.
+        public static volatile AgentRunResult LatestAgentRunResult;
     }
 }
