@@ -3,7 +3,9 @@ using System.IO;
 using System.Net;
 using System.Text;
 using System.Threading;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using OniAgent.Commands;
 using OniAgent.Settings;
 using OniAgent.Snapshot;
 using UnityEngine;
@@ -42,6 +44,15 @@ namespace OniAgent.Networking
     {
         private const string Channel = "oni";
         private const string AgentRunEventType = "oni_agent_run";
+
+        // Task #50 command channel: the agent issues dig/build orders by
+        // calling the already-generic send_sse_notification tool with
+        // event_type="oni_command" — deliberately reusing the platform's
+        // existing native SSE push instead of a bespoke agent tool (see
+        // ledgyx-admin-ui task #50 discussion). data payload matches
+        // Commands.CommandBatchRequest's shape ({"commands":[...]}); extra
+        // keys (e.g. "message") are ignored by Newtonsoft on deserialize.
+        private const string CommandEventType = "oni_command";
         private const int MaxReconnectAttempts = 10;
         private const int MaxBackoffMs = 30000;
 
@@ -125,15 +136,16 @@ namespace OniAgent.Networking
         // the stream cleanly; Run() treats that the same as any other drop.
         private void Connect()
         {
+            var types = AgentRunEventType + "," + CommandEventType;
             var query = "token=" + Uri.EscapeDataString(settings.SseToken)
                 + "&channels=" + Uri.EscapeDataString(Channel)
-                + "&types=" + Uri.EscapeDataString(AgentRunEventType);
+                + "&types=" + Uri.EscapeDataString(types);
             var url = settings.SseEndpoint + (settings.SseEndpoint.Contains("?") ? "&" : "?") + query;
 
             // Token redacted — this line exists so a support log can confirm
             // channels/types actually went out, without leaking the token.
             Debug.Log("[OniAgent] LedgyxSseClient: connecting to " + settings.SseEndpoint
-                + "?token=<redacted>&channels=" + Channel + "&types=" + AgentRunEventType);
+                + "?token=<redacted>&channels=" + Channel + "&types=" + types);
 
             var request = (HttpWebRequest)WebRequest.Create(url);
             request.Method = "GET";
@@ -199,6 +211,9 @@ namespace OniAgent.Networking
                 case AgentRunEventType:
                     HandleAgentRun(data);
                     break;
+                case CommandEventType:
+                    HandleCommand(data);
+                    break;
                 default:
                     Debug.Log("[OniAgent] LedgyxSseClient: ignoring unhandled event type '" + eventType + "'.");
                     break;
@@ -238,6 +253,32 @@ namespace OniAgent.Networking
             catch (Exception e)
             {
                 Debug.LogError("[OniAgent] LedgyxSseClient: failed to parse oni_agent_run payload: " + e + "\nraw: " + json);
+            }
+        }
+
+        // Same no-blocking-here posture as the rest of this class: parsing
+        // happens on this SSE worker thread, but applying the commands to
+        // Grid/BuildingDef must happen on the Unity main thread — so this
+        // only ever enqueues onto CommandQueue, same entry point ApiServer's
+        // POST /api/command uses. CommandTicker.LateUpdate does the rest.
+        private void HandleCommand(string json)
+        {
+            try
+            {
+                var request = JsonConvert.DeserializeObject<CommandBatchRequest>(json);
+                if (request == null || request.Commands == null || request.Commands.Count == 0)
+                {
+                    Debug.LogWarning("[OniAgent] LedgyxSseClient: oni_command payload had no commands, ignoring.\nraw: " + json);
+                    return;
+                }
+
+                var batchId = "sse-" + Guid.NewGuid();
+                CommandQueue.Enqueue(new PendingBatch { BatchId = batchId, Request = request });
+                Debug.Log("[OniAgent] LedgyxSseClient: queued " + request.Commands.Count + " command(s) from SSE as batch " + batchId);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError("[OniAgent] LedgyxSseClient: failed to parse oni_command payload: " + e + "\nraw: " + json);
             }
         }
     }
