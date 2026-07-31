@@ -56,6 +56,7 @@ namespace OniAgent.Commands
             Grid.CellToXY(originCell, out int ox, out int oy);
             int queued = 0;
             int skipped = 0;
+            int skippedLiquidAdjacent = 0;
 
             int xLo = System.Math.Min(item.X1, item.X2);
             int xHi = System.Math.Max(item.X1, item.X2);
@@ -70,6 +71,20 @@ namespace OniAgent.Commands
                     if (!Grid.IsValidCell(cell))
                     {
                         skipped++;
+                        continue;
+                    }
+
+                    // Safety net after the 2026-07-31 flooding incident: a cell
+                    // bordering an existing liquid pool is very likely the wall
+                    // holding that liquid back. Leave those cells alone rather
+                    // than queue a dig that would breach the reservoir — this
+                    // is a coarse heuristic (doesn't know about gas pockets,
+                    // pressure, or reservoirs more than one cell away), not a
+                    // full hazard analysis, so still worth a human glancing at
+                    // the map before digging near known liquid features.
+                    if (IsAdjacentToLiquid(cell))
+                    {
+                        skippedLiquidAdjacent++;
                         continue;
                     }
 
@@ -88,7 +103,20 @@ namespace OniAgent.Commands
                 }
             }
 
-            return CommandItemResult.Success(item, $"dig_rect: queued {queued} cell(s), skipped {skipped} (already clear/marked/invalid)");
+            return CommandItemResult.Success(item, $"dig_rect: queued {queued} cell(s), skipped {skipped} (already clear/marked/invalid), skipped {skippedLiquidAdjacent} (adjacent to liquid — left as a wall)");
+        }
+
+        private static bool IsAdjacentToLiquid(int cell)
+        {
+            int[] neighbors = { Grid.CellAbove(cell), Grid.CellBelow(cell), Grid.CellLeft(cell), Grid.CellRight(cell) };
+            foreach (var neighbor in neighbors)
+            {
+                if (Grid.IsValidCell(neighbor) && Grid.Element[neighbor].IsLiquid)
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         // Places a building instantly-complete at (X,Y) relative to origin
@@ -117,7 +145,19 @@ namespace OniAgent.Commands
             var orientation = Orientation.Neutral;
             if (!BuildingDef.CheckFoundation(cell, orientation, def.BuildLocationRule, def.WidthInCells, def.HeightInCells))
             {
-                return CommandItemResult.Fail(item, "CheckFoundation failed for " + item.Building + " at offset (" + item.X + "," + item.Y + ") — likely missing floor/foundation or space is occupied");
+                return CommandItemResult.Fail(item, "CheckFoundation failed for " + item.Building + " at offset (" + item.X + "," + item.Y + ") — likely missing floor/foundation");
+            }
+
+            // 2026-07-31 incident: a Ladder got placed on top of the
+            // vanilla starting ladder that already sits under the Printing
+            // Pod, because CheckFoundation only looks at the cell(s) below
+            // the footprint, never the footprint cells themselves. This
+            // walks the actual footprint (matches BuildingDef.Build's own
+            // width/height iteration) and refuses to build if anything
+            // already occupies ObjectLayer.Building there.
+            if (!IsFootprintClear(cell, def.WidthInCells, def.HeightInCells))
+            {
+                return CommandItemResult.Fail(item, item.Building + " at offset (" + item.X + "," + item.Y + ") would overlap an existing building — pick a different offset");
             }
 
             var elements = def.DefaultElements();
@@ -125,6 +165,30 @@ namespace OniAgent.Commands
             return go != null
                 ? CommandItemResult.Success(item, "built " + item.Building + " at offset (" + item.X + "," + item.Y + ")")
                 : CommandItemResult.Fail(item, "Build() returned null for " + item.Building);
+        }
+
+        // Bottom-left-anchored footprint, matching BuildingDef.Build's own
+        // MarkArea call for Orientation.Neutral. Only checks ObjectLayer.Building
+        // (not Backwall/tile layers/etc — good enough to catch "already a
+        // building here", the case that actually bit us).
+        private static bool IsFootprintClear(int anchorCell, int widthInCells, int heightInCells)
+        {
+            for (int dx = 0; dx < widthInCells; dx++)
+            {
+                for (int dy = 0; dy < heightInCells; dy++)
+                {
+                    int cell = Grid.OffsetCell(anchorCell, dx, dy);
+                    if (!Grid.IsValidCell(cell))
+                    {
+                        return false;
+                    }
+                    if (Grid.Objects[cell, (int)ObjectLayer.Building] != null)
+                    {
+                        return false;
+                    }
+                }
+            }
+            return true;
         }
     }
 }
