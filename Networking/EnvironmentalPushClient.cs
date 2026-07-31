@@ -41,8 +41,13 @@ namespace OniAgent.Networking
 
         // Never let an exception escape the timer callback — that would
         // silently stop all future ticks with no error surfaced anywhere.
+        //
+        // Same start/completed bracket as LedgyxPushClient.Tick, added for
+        // the same reason (task #20) — this client uses the identical
+        // System.Threading.Timer pattern, so it's equally implicated.
         private void Tick()
         {
+            Debug.Log("[OniAgent] EnvironmentalPushClient: tick started");
             try
             {
                 Push();
@@ -50,6 +55,10 @@ namespace OniAgent.Networking
             catch (Exception e)
             {
                 Debug.LogError("[OniAgent] EnvironmentalPushClient push failed: " + e);
+            }
+            finally
+            {
+                Debug.Log("[OniAgent] EnvironmentalPushClient: tick completed");
             }
         }
 

@@ -41,8 +41,17 @@ namespace OniAgent.Networking
 
         // Never let an exception escape the timer callback — that would
         // silently stop all future ticks with no error surfaced anywhere.
+        //
+        // The start/completed bracket exists to localize a native Mono SEGV
+        // reported 2026-07-31 (thread 74) whose last log line before the
+        // crash was this client's own "push succeeded" — see task #20. If
+        // "tick completed" is missing from the log at crash time, the fault
+        // is inside this callback (Push/JSON/HTTP); if it's present, the
+        // fault happened after the ThreadPool callback returned, pointing
+        // at thread-pool/Mono teardown timing instead of this code.
         private void Tick()
         {
+            Debug.Log("[OniAgent] LedgyxPushClient: tick started");
             try
             {
                 Push();
@@ -50,6 +59,10 @@ namespace OniAgent.Networking
             catch (Exception e)
             {
                 Debug.LogError("[OniAgent] LedgyxPushClient push failed: " + e);
+            }
+            finally
+            {
+                Debug.Log("[OniAgent] LedgyxPushClient: tick completed");
             }
         }
 
